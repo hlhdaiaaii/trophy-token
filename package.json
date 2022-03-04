@@ -1,0 +1,42 @@
+{
+  "name": "hardhat-typescript-template",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "cross-env NODE_ENV=production hardhat run scripts/deploy.ts --network bsc",
+    "verify": "cross-env NODE_ENV=production hardhat verify --network bsc",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network bsc",
+    "verify:testnet": "hardhat verify --network bsc",
+    "test": "hardhat test"
+  },
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.0.5",
+    "@nomiclabs/hardhat-etherscan": "^3.0.1",
+    "@nomiclabs/hardhat-waffle": "^2.0.2",
+    "@openzeppelin/contracts": "^4.5.0",
+    "@typechain/ethers-v5": "^9.0.0",
+    "@typechain/hardhat": "^4.0.0",
+    "@types/chai": "^4.3.0",
+    "@types/dotenv": "^8.2.0",
+    "@types/mocha": "^9.1.0",
+    "@types/node": "^17.0.18",
+    "chai": "^4.3.6",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.0.0",
+    "ethereum-waffle": "^3.4.0",
+    "ethers": "^5.5.4",
+    "hardhat": "^2.9.0",
+    "hardhat-abi-exporter": "^2.8.0",
+    "hardhat-gas-reporter": "^1.0.8",
+    "hardhat-log-remover": "^2.0.2",
+    "solidity-coverage": "^0.7.20",
+    "ts-node": "^10.5.0",
+    "typechain": "^7.0.0",
+    "typescript": "^4.5.5"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.3"
+  }
+}
