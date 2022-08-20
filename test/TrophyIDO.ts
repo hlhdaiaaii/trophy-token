@@ -36,14 +36,15 @@ describe("TrophyIDO", async function () {
 
   const ROUTER_ADDRESS = "0x10ed43c718714eb63d5aa57b78b54704e256024e";
   const PANCAKE_FACTORY_ADDRESS = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73";
-  const PRICE = 10; // 10/1000 = 0.01
-  const LISTING_PRICE = 20; // 20/1000 = 0.02
+  const PRICE = parseUnits(0.00004);
+  const LISTING_PRICE = parseUnits(0.00006);
   const MIN_PURCHASE = parseUnits(0.2);
   const MAX_PURCHASE = parseUnits(1);
   const HARD_CAP = parseUnits(1000); // 1000 BNB
   const LP_PERCENT = 600; // 600/1000 = 60%
   const ONE_DAY_IN_SECONDS = 86400;
   const BURN_ADDRESS = "0x000000000000000000000000000000000000dead";
+  const ONE_ETH = parseUnits(1);
 
   before(async () => {
     [admin, user1, user2, lpTo, mkt, dev] = await ethers.getSigners();
@@ -104,19 +105,6 @@ describe("TrophyIDO", async function () {
 
     // excluded ido contract from fee
     await trophyToken.connect(admin).addExcludedFromFee(trophyIDO.address);
-
-    // allocate trophy token
-    const totalRequiredToken = HARD_CAP.add(HARD_CAP.mul(LP_PERCENT).div(1000))
-      .mul(1000)
-      .div(PRICE);
-
-    console.log(
-      "🚀 ~ file: TrophyIDO.ts ~ line 101 ~ before ~ totalRequiredToken",
-      totalRequiredToken
-    );
-    await trophyToken
-      .connect(admin)
-      .mint(trophyIDO.address, totalRequiredToken);
 
     // allocate mock busd
     // mockBUSD
@@ -205,13 +193,36 @@ describe("TrophyIDO", async function () {
         currentCap
       );
 
+      // allocate trophy token
+      const totalRequiredToken = await trophyIDO.calcTotalTokensRequired();
+
+      console.log(
+        "🚀 ~ file: TrophyIDO.ts ~ line 101 ~ before ~ totalRequiredToken",
+        totalRequiredToken
+      );
+      await trophyToken
+        .connect(admin)
+        .mint(trophyIDO.address, totalRequiredToken);
+
       const adminBNBBF = await admin.getBalance();
       console.log(
         "🚀 ~ file: TrophyIDO.ts ~ line 192 ~ it ~ adminBNBBF",
         adminBNBBF
       );
 
+      const idoTokenBalanceBF = await trophyToken.balanceOf(trophyIDO.address);
+      console.log(
+        "🚀 ~ file: TrophyIDO.ts ~ line 217 ~ it ~ idoTokenBalanceBF",
+        idoTokenBalanceBF
+      );
+
       await trophyIDO.connect(admin).finalize(admin.address);
+
+      const idoTokenBalanceAT = await trophyToken.balanceOf(trophyIDO.address);
+      console.log(
+        "🚀 ~ file: TrophyIDO.ts ~ line 217 ~ it ~ idoTokenBalanceAT",
+        idoTokenBalanceAT
+      );
 
       const reserves = await pair.getReserves();
       console.log(
@@ -269,6 +280,12 @@ describe("TrophyIDO", async function () {
       console.log(
         "🚀 ~ file: TrophyIDO.ts ~ line 228 ~ it ~ user2TokenBalanceAT",
         user2TokenBalanceAT
+      );
+
+      const idoTokenBalanceAT = await trophyToken.balanceOf(trophyIDO.address);
+      console.log(
+        "🚀 ~ file: TrophyIDO.ts ~ line 217 ~ it ~ idoTokenBalanceAT",
+        idoTokenBalanceAT
       );
     });
 

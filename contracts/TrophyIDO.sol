@@ -158,6 +158,17 @@ contract TrophyIDO is Ownable, ReentrancyGuard {
         emit Purchased(msg.sender, amount);
     }
 
+    function calcTotalTokensRequired() public view returns (uint256) {
+        return
+            currentCap.mul(1 ether).div(price).add(
+                currentCap
+                    .mul(lpPercent)
+                    .div(RATE_PRECISION_FACTOR)
+                    .mul(1 ether)
+                    .div(listingPrice)
+            );
+    }
+
     function finalize(address _to) external onlyOwner {
         require(status == SaleStatus.STARTED, "ALREADY_FINALIZED_OR_CANCELED");
         status = SaleStatus.FINALIZED;
@@ -166,9 +177,7 @@ contract TrophyIDO is Ownable, ReentrancyGuard {
         uint256 ethLiqAmount = currentCap.mul(lpPercent).div(
             RATE_PRECISION_FACTOR
         );
-        uint256 tokenLiqAmount = ethLiqAmount.mul(RATE_PRECISION_FACTOR).div(
-            listingPrice
-        );
+        uint256 tokenLiqAmount = ethLiqAmount.mul(1 ether).div(listingPrice);
 
         token.approve(address(ROUTER), tokenLiqAmount);
 
@@ -217,10 +226,7 @@ contract TrophyIDO is Ownable, ReentrancyGuard {
         purchaseDetails[msg.sender].isClaimed = true;
 
         // uint256 currentRate = calcCurrentRate();
-        uint256 claimAmount = purchaseDetail
-            .amount
-            .mul(RATE_PRECISION_FACTOR)
-            .div(price);
+        uint256 claimAmount = purchaseDetail.amount.mul(1 ether).div(price);
 
         token.transfer(msg.sender, claimAmount);
 
