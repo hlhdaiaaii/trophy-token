@@ -57,8 +57,11 @@ contract TrophyToken is ERC20, Ownable {
 
     uint256 public liquidifyPercent;
     address public lpTo;
-    address public pair;
-    IPancakeRouter public router;
+
+    // support for other pools
+    mapping(address => bool) public pairs;
+    // pair => router
+    mapping(address => IPancakeRouter) public routers;
 
     receive() external payable {}
 
@@ -71,17 +74,17 @@ contract TrophyToken is ERC20, Ownable {
         address[] memory _feeTos,
         uint256[] memory _feePercents
     ) ERC20("Trophy Token", "TRT") {
-        router = IPancakeRouter(_router);
+        IPancakeRouter router = IPancakeRouter(_router);
 
-        // Create a uniswap pair for this new token
-        pair = IPancakeFactory(router.factory()).createPair(
+        // Create a pancakeswap pair for this new token
+        address pair = IPancakeFactory(router.factory()).createPair(
             address(this),
             router.WETH()
         );
+
+        addPair(pair, _router);
         liquidifyPercent = _liquidifyPercent;
         lpTo = _lpTo;
-        uint256 MAX_UINT = ~uint256(0);
-        _approve(address(this), address(router), MAX_UINT);
 
         burnFeePercent = _burnFeePercent;
         BURN_ADDRESS = _burnAddress;
@@ -94,12 +97,24 @@ contract TrophyToken is ERC20, Ownable {
         addExcludedFromFee(address(this));
     }
 
-    function addFeeTo(address _feeTo, uint256 feePercent) public onlyOwner {
+    function addPair(address _pair, address _router) public onlyOwner {
+        pairs[_pair] = true;
+        routers[_pair] = IPancakeRouter(_router);
+
+        uint256 MAX_UINT = ~uint256(0);
+        _approve(address(this), address(_router), MAX_UINT);
+    }
+
+    function removePair(address _pair) public onlyOwner {
+        pairs[_pair] = false;
+    }
+
+    function addFeeTo(address _feeTo, uint256 _feePercent) public onlyOwner {
         require(!feeTos[_feeTo], "TRT: feeTo already added");
         payable(_feeTo).transfer(0); // check if address can receive eth
         feeTos[_feeTo] = true;
         feeToList.push(_feeTo);
-        feePercents[_feeTo] = feePercent;
+        feePercents[_feeTo] = _feePercent;
     }
 
     function removeFeeTo(address _feeTo) public onlyOwner {
@@ -146,8 +161,12 @@ contract TrophyToken is ERC20, Ownable {
         return excludedFromFeeList;
     }
 
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
-        router.addLiquidityETH{value: ethAmount}(
+    function addLiquidity(
+        address pair,
+        uint256 tokenAmount,
+        uint256 ethAmount
+    ) private {
+        routers[pair].addLiquidityETH{value: ethAmount}(
             address(this),
             tokenAmount,
             0, // slippage is unavoidable
@@ -157,15 +176,15 @@ contract TrophyToken is ERC20, Ownable {
         );
     }
 
-    function swapTokensForEth(uint256 tokenAmount) private {
-        // generate the uniswap pair path of token -> weth
+    function swapTokensForEth(address _pair, uint256 _tokenAmount) private {
+        // generate the pancake pair path of token -> weth
         address[] memory path = new address[](2);
         path[0] = address(this);
-        path[1] = router.WETH();
+        path[1] = routers[_pair].WETH();
 
         // make the swap
-        router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
+        routers[_pair].swapExactTokensForETHSupportingFeeOnTransferTokens(
+            _tokenAmount,
             0, // accept any amount of ETH
             path,
             address(this),
@@ -183,48 +202,48 @@ contract TrophyToken is ERC20, Ownable {
     }
 
     function _transfer(
-        address from,
-        address to,
-        uint256 amount
+        address _from,
+        address _to,
+        uint256 _amount
     ) internal override {
         uint256 totalFeeAmount;
 
         if (
-            to == pair && // transfer to the uniswap pair, could be sell or add liquidity transaction
-            !excludedFromFee[from] // not excluded from fee
+            pairs[_to] && !excludedFromFee[_from] // transfer to the pancakeswap pair, could be sell or add liquidity transaction // not excluded from fee
         ) {
+            address pair = _to;
             uint256 totalFeeToPercent = calcTotalFeeToPercent();
-            uint256 totalFeeToAmount = amount.mul(totalFeeToPercent).div(
+            uint256 totalFeeToAmount = _amount.mul(totalFeeToPercent).div(
                 PRECISION_RATE
             );
 
             uint256 totalFeePercent = totalFeeToPercent.add(burnFeePercent).add(
                 liquidifyPercent
             );
-            totalFeeAmount = amount.mul(totalFeePercent).div(PRECISION_RATE);
+            totalFeeAmount = _amount.mul(totalFeePercent).div(PRECISION_RATE);
 
             // scope to avoid stack too deep errors
             {
-                uint256 burnFeeAmount = amount.mul(burnFeePercent).div(
+                uint256 burnFeeAmount = _amount.mul(burnFeePercent).div(
                     PRECISION_RATE
                 );
                 super._transfer(
-                    from,
+                    _from,
                     address(this),
                     totalFeeAmount.sub(burnFeeAmount)
                 );
-                super._transfer(from, BURN_ADDRESS, burnFeeAmount);
+                super._transfer(_from, BURN_ADDRESS, burnFeeAmount);
             }
 
             uint256 halfLiquidifyPercent = liquidifyPercent.div(2);
-            uint256 halfLiquidifyAmount = amount.mul(halfLiquidifyPercent).div(
+            uint256 halfLiquidifyAmount = _amount.mul(halfLiquidifyPercent).div(
                 PRECISION_RATE
             );
 
             uint256 otherHalfLiquidifyPercent = liquidifyPercent.sub(
                 halfLiquidifyPercent
             );
-            uint256 otherHalfLiquidifyAmount = amount
+            uint256 otherHalfLiquidifyAmount = _amount
                 .mul(otherHalfLiquidifyPercent)
                 .div(PRECISION_RATE);
 
@@ -232,12 +251,12 @@ contract TrophyToken is ERC20, Ownable {
                 halfLiquidifyAmount
             );
             uint256 initialEth = address(this).balance;
-            swapTokensForEth(tokenAmountForSwap);
+            swapTokensForEth(pair, tokenAmountForSwap);
             uint256 gainedEth = address(this).balance.sub(initialEth);
             uint256 ethForLiquidify = gainedEth.mul(halfLiquidifyPercent).div(
                 totalFeeToPercent.add(halfLiquidifyPercent)
             );
-            addLiquidity(otherHalfLiquidifyAmount, ethForLiquidify);
+            addLiquidity(pair, otherHalfLiquidifyAmount, ethForLiquidify);
             uint256 gainedEthForFeeTos = gainedEth.sub(ethForLiquidify);
             // distribute fee to feeToList
             uint256 distributeSoFar = 0;
@@ -255,11 +274,11 @@ contract TrophyToken is ERC20, Ownable {
                 }
             }
         }
-        super._transfer(from, to, amount.sub(totalFeeAmount));
+        super._transfer(_from, _to, _amount.sub(totalFeeAmount));
     }
 
-    function mint(address to, uint256 amount) external onlyOwner {
-        _mint(to, amount);
+    function mint(address _to, uint256 _amount) external onlyOwner {
+        _mint(_to, _amount);
     }
 
     function getEthBalance() public view returns (uint256) {

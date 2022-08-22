@@ -79,8 +79,14 @@ describe("TrophyIDO", async function () {
         [2000, 2000]
       );
 
+    // pair = <PancakePair>(
+    //   await ethers.getContractAt(PancakePairABI, await trophyToken.pair())
+    // );
     pair = <PancakePair>(
-      await ethers.getContractAt(PancakePairABI, await trophyToken.pair())
+      await ethers.getContractAt(
+        PancakePairABI,
+        await pancakeFactory.getPair(trophyToken.address, await router.WETH())
+      )
     );
 
     const trophyIDOFactory = <TrophyIDO__factory>(

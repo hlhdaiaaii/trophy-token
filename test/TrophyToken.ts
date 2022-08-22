@@ -1,19 +1,20 @@
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import chai from "chai";
+import chai, { expect } from "chai";
 import { solidity } from "ethereum-waffle";
 import { ethers } from "hardhat";
-import PancakeFactoryABI from "../abi/PancakeFactory.json";
-import PancakePairABI from "../abi/PancakePair.json";
-import RouterABI from "../abi/Router.json";
-import WrappedBNBABI from "../abi/WrappedBNB.json";
 import { TrophyToken__factory } from "../types/factories/TrophyToken__factory";
-import { MockBUSD } from "../types/MockBUSD";
-import { PancakeFactory } from "../types/PancakeFactory";
-import { PancakePair } from "../types/PancakePair";
-import { Router } from "../types/Router";
 import { TrophyToken } from "../types/TrophyToken";
+import { Router } from "../types/Router";
+import RouterABI from "../abi/Router.json";
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { MockBUSD__factory } from "../types/factories/MockBUSD__factory";
+import { MockBUSD } from "../types/MockBUSD";
+import { formatUnits, moveToTime, parseUnits } from "./utils";
+import { PancakeFactory } from "../types/PancakeFactory";
+import PancakeFactoryABI from "../abi/PancakeFactory.json";
+import WrappedBNBABI from "../abi/WrappedBNB.json";
 import { WrappedBNB } from "../types/WrappedBNB";
-import { parseUnits } from "./utils";
+import { PancakePair } from "../types/PancakePair";
+import PancakePairABI from "../abi/PancakePair.json";
 
 chai.use(solidity);
 const { assert } = chai;
@@ -157,8 +158,14 @@ describe("TrophyTokenV2", async () => {
         }
       );
 
+    // pair = <PancakePair>(
+    //   await ethers.getContractAt(PancakePairABI, await trophyToken.pair())
+    // );
     pair = <PancakePair>(
-      await ethers.getContractAt(PancakePairABI, await trophyToken.pair())
+      await ethers.getContractAt(
+        PancakePairABI,
+        await pancakeFactory.getPair(trophyToken.address, await router.WETH())
+      )
     );
     console.log(
       "🚀 ~ file: TrophyTokenV2.ts ~ line 113 ~ before ~ pair",
@@ -171,18 +178,26 @@ describe("TrophyTokenV2", async () => {
       const path = [wrappedBNB.address, trophyToken.address];
 
       // const amountOutMin = parseUnits(1000);
+      const amountIn = parseUnits(5);
+      const amountOut = (await router.getAmountsOut(amountIn, path))[1];
 
+      const user1TokenBalanceBF = await trophyToken.balanceOf(user1.address);
+      console.log(
+        "🚀 ~ file: TrophyTokenV2.ts ~ line 139 ~ it ~ user1TokenBalanceBF",
+        user1TokenBalanceBF
+      );
       await router
         .connect(user1)
         .swapExactETHForTokens(0, path, user1.address, now + 60000, {
-          value: parseUnits(5),
+          value: amountIn,
         });
 
-      const user1TokenBalance = await trophyToken.balanceOf(user1.address);
+      const user1TokenBalanceAT = await trophyToken.balanceOf(user1.address);
       console.log(
-        "🚀 ~ file: TrophyTokenV2.ts ~ line 139 ~ it ~ user1TokenBalance",
-        user1TokenBalance
+        "🚀 ~ file: TrophyTokenV2.ts ~ line 139 ~ it ~ user1TokenBalanceAT",
+        user1TokenBalanceAT
       );
+      expect(user1TokenBalanceAT).to.equal(amountOut);
     });
 
     it("should let user sell with fee", async () => {
@@ -198,6 +213,15 @@ describe("TrophyTokenV2", async () => {
       //   "🚀 ~ file: TrophyTokenV2.ts ~ line 193 ~ it ~ feeToListAT",
       //   feeToListAT
       // );
+
+      await trophyToken.connect(admin).addExcludedFromFee(user1.address);
+
+      await trophyToken.connect(admin).removeExcludedFromFee(user1.address);
+      const addExcludedFromFeeList = await trophyToken.getExcludedFromFeeList();
+      console.log(
+        "🚀 ~ file: TrophyTokenV2.ts ~ line 205 ~ it ~ addExcludedFromFeeList",
+        addExcludedFromFeeList
+      );
 
       const path = [trophyToken.address, wrappedBNB.address];
       const amountIn = parseUnits(100000);
@@ -344,6 +368,20 @@ describe("TrophyTokenV2", async () => {
         "🚀 ~ file: TrophyTokenV2.ts ~ line 348 ~ it ~ user2TokenBalanceAT",
         user2TokenBalanceAT
       );
+    });
+
+    it("should let user add liquidity", async () => {
+      await router
+        .connect(user1)
+        .addLiquidityETH(
+          trophyToken.address,
+          parseUnits(1000),
+          0,
+          0,
+          user1.address,
+          now + 60000,
+          { value: parseUnits(10) }
+        );
     });
   });
 });
