@@ -108,6 +108,7 @@ contract TrophyToken is ERC20, Ownable {
     }
 
     function addFeeTo(address _feeTo, uint256 _feePercent) public onlyOwner {
+        require(feeToList.length < 3, "TRT: reached max number of feeTos");
         require(!feeTos[_feeTo], "TRT: feeTo already added");
         payable(_feeTo).transfer(0); // check if address can receive eth
         feeTos[_feeTo] = true;
