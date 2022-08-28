@@ -53,7 +53,7 @@ contract TrophyToken is ERC20, Ownable {
     address[] public excludedFromFeeList;
 
     uint256 public burnFeePercent;
-    address public immutable BURN_ADDRESS;
+    address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
     uint256 public liquidifyPercent;
     address public lpTo;
@@ -70,7 +70,6 @@ contract TrophyToken is ERC20, Ownable {
         address _lpTo,
         uint256 _liquidifyPercent,
         uint256 _burnFeePercent,
-        address _burnAddress,
         address[] memory _feeTos,
         uint256[] memory _feePercents
     ) ERC20("Trophy Token", "TRT") {
@@ -87,7 +86,6 @@ contract TrophyToken is ERC20, Ownable {
         lpTo = _lpTo;
 
         burnFeePercent = _burnFeePercent;
-        BURN_ADDRESS = _burnAddress;
 
         for (uint256 i = 0; i < _feeTos.length; i++) {
             addFeeTo(_feeTos[i], _feePercents[i]);
@@ -206,8 +204,11 @@ contract TrophyToken is ERC20, Ownable {
         address _to,
         uint256 _amount
     ) internal override {
+        // safety check for the very unlikely case
+        // that someday someone figures out the private key of the burn address
+        require(_from != BURN_ADDRESS, "BURN_ADDRESS can't transfer!");
+        
         uint256 totalFeeAmount;
-
         if (
             pairs[_to] && !excludedFromFee[_from] // transfer to the pancakeswap pair, could be sell or add liquidity transaction // not excluded from fee
         ) {
