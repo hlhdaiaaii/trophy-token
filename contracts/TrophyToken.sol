@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 interface IPancakeRouter {
     function swapExactTokensForETHSupportingFeeOnTransferTokens(
@@ -42,7 +41,6 @@ interface IPancakeFactory {
 }
 
 contract TrophyToken is ERC20, Ownable {
-    using SafeMath for uint256;
     uint256 public constant PRECISION_RATE = 100000; // e.g. 5000 = 5%
 
     mapping(address => bool) public feeTos;
@@ -195,7 +193,7 @@ contract TrophyToken is ERC20, Ownable {
     function calcTotalFeeToPercent() public view returns (uint256) {
         uint256 totalFeePercent = 0;
         for (uint256 i = 0; i < feeToList.length; i++) {
-            totalFeePercent = totalFeePercent.add(feePercents[feeToList[i]]);
+            totalFeePercent = totalFeePercent + feePercents[feeToList[i]];
         }
         return totalFeePercent;
     }
@@ -208,75 +206,66 @@ contract TrophyToken is ERC20, Ownable {
         // safety check for the very unlikely case
         // that someday someone figures out the private key of the burn address
         require(_from != BURN_ADDRESS, "BURN_ADDRESS can't transfer!");
-        
+
         uint256 totalFeeAmount;
         if (
             pairs[_to] && !excludedFromFee[_from] // transfer to the pancakeswap pair, could be sell or add liquidity transaction // not excluded from fee
         ) {
             address pair = _to;
             uint256 totalFeeToPercent = calcTotalFeeToPercent();
-            uint256 totalFeeToAmount = _amount.mul(totalFeeToPercent).div(
-                PRECISION_RATE
-            );
+            uint256 totalFeeToAmount = _amount * totalFeeToPercent /
+                PRECISION_RATE;
 
-            uint256 totalFeePercent = totalFeeToPercent.add(burnFeePercent).add(
-                liquidifyPercent
-            );
-            totalFeeAmount = _amount.mul(totalFeePercent).div(PRECISION_RATE);
+            uint256 totalFeePercent = totalFeeToPercent +
+                burnFeePercent +
+                liquidifyPercent;
+            totalFeeAmount = _amount * totalFeePercent / PRECISION_RATE;
 
             // scope to avoid stack too deep errors
             {
-                uint256 burnFeeAmount = _amount.mul(burnFeePercent).div(
-                    PRECISION_RATE
-                );
+                uint256 burnFeeAmount = _amount * burnFeePercent /
+                    PRECISION_RATE;
                 super._transfer(
                     _from,
                     address(this),
-                    totalFeeAmount.sub(burnFeeAmount)
+                    totalFeeAmount - burnFeeAmount
                 );
                 super._transfer(_from, BURN_ADDRESS, burnFeeAmount);
             }
 
-            uint256 halfLiquidifyPercent = liquidifyPercent.div(2);
-            uint256 halfLiquidifyAmount = _amount.mul(halfLiquidifyPercent).div(
-                PRECISION_RATE
-            );
+            uint256 halfLiquidifyPercent = liquidifyPercent / 2;
+            uint256 halfLiquidifyAmount = _amount * halfLiquidifyPercent /
+                PRECISION_RATE;
 
-            uint256 otherHalfLiquidifyPercent = liquidifyPercent.sub(
-                halfLiquidifyPercent
-            );
-            uint256 otherHalfLiquidifyAmount = _amount
-                .mul(otherHalfLiquidifyPercent)
-                .div(PRECISION_RATE);
+            uint256 otherHalfLiquidifyPercent = liquidifyPercent -
+                halfLiquidifyPercent;
+            uint256 otherHalfLiquidifyAmount = _amount *
+                otherHalfLiquidifyPercent / PRECISION_RATE;
 
-            uint256 tokenAmountForSwap = totalFeeToAmount.add(
-                halfLiquidifyAmount
-            );
+            uint256 tokenAmountForSwap = totalFeeToAmount + halfLiquidifyAmount;
             uint256 initialEth = address(this).balance;
             swapTokensForEth(pair, tokenAmountForSwap);
-            uint256 gainedEth = address(this).balance.sub(initialEth);
-            uint256 ethForLiquidify = gainedEth.mul(halfLiquidifyPercent).div(
-                totalFeeToPercent.add(halfLiquidifyPercent)
-            );
+            uint256 gainedEth = address(this).balance - initialEth;
+            uint256 ethForLiquidify = gainedEth * halfLiquidifyPercent /
+                (totalFeeToPercent + halfLiquidifyPercent);
             addLiquidity(pair, otherHalfLiquidifyAmount, ethForLiquidify);
-            uint256 gainedEthForFeeTos = gainedEth.sub(ethForLiquidify);
+            uint256 gainedEthForFeeTos = gainedEth - ethForLiquidify;
             // distribute fee to feeToList
             uint256 distributeSoFar = 0;
             for (uint256 i = 0; i < feeToList.length; i++) {
                 if (i == feeToList.length - 1) {
                     payable(feeToList[i]).transfer(
-                        gainedEthForFeeTos.sub(distributeSoFar)
+                        gainedEthForFeeTos - distributeSoFar
                     );
                 } else {
-                    uint256 transferAmount = gainedEthForFeeTos
-                        .mul(feePercents[feeToList[i]])
-                        .div(totalFeeToPercent);
+                    uint256 transferAmount = gainedEthForFeeTos *
+                        feePercents[feeToList[i]] / totalFeeToPercent;
                     payable(feeToList[i]).transfer(transferAmount);
-                    distributeSoFar = distributeSoFar.add(transferAmount);
+                    distributeSoFar = distributeSoFar + transferAmount;
                 }
             }
         }
-        super._transfer(_from, _to, _amount.sub(totalFeeAmount));
+        super._transfer(_from, _to, _amount - totalFeeAmount);
     }
 
     function mint(address _to, uint256 _amount) external onlyOwner {
