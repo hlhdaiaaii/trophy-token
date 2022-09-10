@@ -61,6 +61,11 @@ contract TrophyToken is ERC20, Ownable {
     // pair => router
     mapping(address => IPancakeRouter) public routers;
 
+    // anti-bot mechanism, these addresses have privilege to buy before any sniper bots out there
+    bool public whitelistedEnabled;
+    mapping(address => bool) public whitelisteds;
+    address[] public whitelistedList;
+
     receive() external payable {}
 
     constructor(
@@ -91,6 +96,8 @@ contract TrophyToken is ERC20, Ownable {
 
         addExcludedFromFee(msg.sender);
         addExcludedFromFee(address(this));
+
+        setWhitelistedEnabled(true);
     }
 
     function addPair(address _pair, address _router) public onlyOwner {
@@ -158,6 +165,40 @@ contract TrophyToken is ERC20, Ownable {
         return excludedFromFeeList;
     }
 
+    function setWhitelistedEnabled(bool _enabled) public onlyOwner {
+        whitelistedEnabled = _enabled;
+    }
+
+    function addWhitelistedMany(address[] memory _bots) public onlyOwner {
+        for (uint256 i = 0; i < _bots.length; i++) {
+            addWhitelistedAddress(_bots[i]);
+        }
+    }
+
+    function addWhitelistedAddress(address _bot) public onlyOwner {
+        require(!whitelisteds[_bot], "TRT: bot already added");
+        whitelisteds[_bot] = true;
+        whitelistedList.push(_bot);
+    }
+
+    function removeWhitelistedAddress(address _bot) public onlyOwner {
+        require(whitelisteds[_bot], "TRT: bot not added");
+
+        for (uint256 i = 0; i < whitelistedList.length; i++) {
+            if (whitelistedList[i] == _bot) {
+                whitelistedList[i] = whitelistedList[whitelistedList.length - 1];
+                whitelistedList.pop();
+
+                whitelisteds[_bot] = false;
+                break;
+            }
+        }
+    }
+
+    function getWhitelistedList() public view returns (address[] memory) {
+        return whitelistedList;
+    }
+
     function addLiquidity(
         address pair,
         uint256 tokenAmount,
@@ -202,7 +243,12 @@ contract TrophyToken is ERC20, Ownable {
         address _from,
         address _to,
         uint256 _amount
-    ) internal override {
+    ) internal override {        
+        // only whitelisted bots can make buy transaction when whitelistedEnabled
+        if (whitelistedEnabled && pairs[_from]) {
+            require(whitelisteds[_to], "TRT: only whitelisted addresses can buy at this time");
+        }
+
         // safety check for the very unlikely case
         // that someday someone figures out the private key of the burn address
         require(_from != BURN_ADDRESS, "BURN_ADDRESS can't transfer!");
